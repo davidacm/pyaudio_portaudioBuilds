@@ -89,9 +89,10 @@ else:
 extra_link_args.append(str(portaudio_shared))
 
 if not STATIC_LINKING:
-    external_libraries.append('portaudio')
+    #external_libraries.append('portaudio')
     dll_path = 'build/msvc/x64/ReleaseDLL/portaudio.dll' if is_x64 else 'build/msvc/Win32/ReleaseDLL/portaudio.dll'
-    data_files.append(('', [os.path.join(portaudio_path, dll_path)]))
+    dll_path = portaudio_path.joinpath(dll_path)
+    data_files.append(('', [str(dll_path)]))
 else:
     include_dirs = [os.path.join(portaudio_path, 'include/')]
     # platform specific configuration

@@ -1,0 +1,84 @@
+# This workflow will build the portaudio dll, and then the wheel for each Python version for each architecture
+
+name: Python package
+
+on:
+  push:
+    tags:
+      '*'
+permissions:
+  contents: write
+jobs:
+  buildLibs:
+    runs-on: windows-latest
+    strategy:
+      matrix: 
+        arch: ['Win32', 'x64'] # 32-bit and 64-bit
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1
+    - name: caching binaries
+      uses: actions/cache@v3
+      with:
+        path: pyaudio/portaudio-v19/build/msvc/${{ matrix.arch }}/ReleaseDLL
+        key: libs-${{ matrix.arch }}
+    - name: compile dll
+      run: |
+        cd pyaudio
+        msbuild portaudio-v19/build/msvc/portaudio.sln /p:Configuration=ReleaseDLL /p:Platform=${{ matrix.arch }}
+
+  buildPackages:
+    needs: buildLibs
+    runs-on: windows-latest
+    strategy:
+      matrix: 
+        arch: ['Win32', 'x64']
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: get cached binaries
+      uses: actions/cache@v3
+      with:
+        path: pyaudio/portaudio-v19/build/msvc/${{ matrix.arch }}/ReleaseDLL
+        key: libs-${{ matrix.arch }}
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        architecture: ${{ matrix.arch == 'Win32' && 'x86' || 'x64' }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade wheel
+    - name: build wheel
+      run: |
+        cd pyaudio
+        python setup.py bdist_wheel
+    - name: share release packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: whlPackages
+        path: pyaudio\dist\*.whl
+        retention-days: 1
+
+  pushRelease:
+    needs: buildPackages
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: get uploaded packages
+      uses: actions/download-artifact@v3
+      with:
+        name: whlPackages
+        path: whlPackages
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: |
+          whlPackages\*.whl
